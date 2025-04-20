@@ -38,7 +38,8 @@ const Memory = () => {
   const [score, setScore] = useState(0);
   const [time, setTime] = useState(0);
   const [isGameOver, setIsGameOver] = useState(false);
-
+  const [flippingBack, setFlippingBack] = useState([]);
+  const [recentlyMatched, setRecentlyMatched] = useState([]);
 
   const emojiDup = [...emoji];
 
@@ -49,6 +50,7 @@ const Memory = () => {
     }
     return emojis;
   }
+  
   useEffect(() => {
     if (isGameOver) return;
 
@@ -65,7 +67,6 @@ const Memory = () => {
     }
   }, [matchedEmoji, shuffledEmoji])
 
-
   useEffect(() => {
     setShuffledEmoji(shuffle([...emojiDup]));
   }, []);
@@ -78,7 +79,8 @@ const Memory = () => {
     if (
       clickedEmoji.length < 2 &&
       !clickedEmoji.includes(item.id) &&
-      !matchedEmoji.includes(item.id)
+      !matchedEmoji.includes(item.id) &&
+      !flippingBack.includes(item.id)
     ) {
       // clickSound.play().catch(() => {})
       setClickedEmoji([...clickedEmoji, item.id]);
@@ -91,13 +93,30 @@ const Memory = () => {
       let second = emoji.find((item) => item.id === clickedEmoji[1]);
 
       if (first.emoji === second.emoji) {
-        setMatchedEmoji([...matchedEmoji, first.id, second.id]);
-        setScore((prev) => prev + 1);
+        // First show them matched with a fade effect
+        setRecentlyMatched([first.id, second.id]);
+        
+        // After the match animation, add them to matched list (which will make them disappear)
+        setTimeout(() => {
+          setMatchedEmoji([...matchedEmoji, first.id, second.id]);
+          setScore((prev) => prev + 1);
+          setClickedEmoji([]);
+          
+          // Clear recently matched after fade animation completes
+          setTimeout(() => {
+            setRecentlyMatched([]);
+          }, 500);
+        }, 800);
+      } else {
+        // Add flippingBack state to animate cards flipping back
+        setTimeout(() => {
+          setFlippingBack(clickedEmoji);
+          setTimeout(() => {
+            setClickedEmoji([]);
+            setFlippingBack([]);
+          }, 500); // Duration of flip back animation
+        }, 1000);
       }
-
-      setTimeout(() => {
-        setClickedEmoji([]);
-      }, 1000);
     }
   }, [clickedEmoji]);
 
@@ -105,6 +124,8 @@ const Memory = () => {
     setMatchedEmoji([]);
     setShuffledEmoji(shuffle([...emojiDup]));
     setClickedEmoji([]);
+    setFlippingBack([]);
+    setRecentlyMatched([]);
     setScore(0);
     setTime(0);
     setIsGameOver(false);
@@ -144,22 +165,37 @@ const Memory = () => {
                   onClick={() => handleClick(item)}
                   className={`
                     aspect-square flex items-center justify-center rounded-xl text-7xl
-                    transition-all duration-300 cursor-pointer
-                    ${
-                      matchedEmoji.includes(item.id)
-                        ? "opacity-0 scale-90"
-                        : "hover:scale-105"
-                    }
-                    ${
-                      clickedEmoji.includes(item.id) || matchedEmoji.includes(item.id)
-                        ? "bg-gray-300 shadow-lg transition-all"
-                        : "bg-gradient-to-br from-purple-600 to-purple-800 shadow-xl"
-                    }
+                    perspective-1000 transition-all duration-300 cursor-pointer
+                    ${matchedEmoji.includes(item.id) ? "pointer-events-none" : ""}
                   `}
                 >
-                  {matchedEmoji.includes(item.id) || clickedEmoji.includes(item.id)
-                    ? item.emoji
-                    : ""}
+                  <div 
+                    className={`
+                      absolute w-full h-full transition-all duration-500 transform-style-preserve-3d
+                      ${matchedEmoji.includes(item.id) ? "opacity-0 scale-95" : ""}
+                      ${(clickedEmoji.includes(item.id) || matchedEmoji.includes(item.id)) ? "rotate-y-180" : ""}
+                      ${flippingBack.includes(item.id) ? "rotate-y-0" : ""}
+                    `}
+                  >
+                    {/* Card Front */}
+                    <div 
+                      className={`
+                        absolute w-full h-full flex items-center justify-center backface-hidden
+                        bg-gradient-to-br from-purple-600 to-purple-800 rounded-xl shadow-xl
+                      `}
+                    />
+                    
+                    {/* Card Back */}
+                    <div 
+                      className={`
+                        absolute w-full h-full flex items-center justify-center backface-hidden rotate-y-180
+                        bg-gray-300 rounded-xl shadow-lg
+                        ${recentlyMatched.includes(item.id) ? "animate-match-fade bg-green-200" : ""}
+                      `}
+                    >
+                      {item.emoji}
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>
@@ -167,10 +203,37 @@ const Memory = () => {
         </div>
       </div>
 
-      {matchedEmoji.length === shuffledEmoji.length && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center">
-          <Card className="p-8 max-w-sm w-full mx-4 text-center">
-            <Trophy className="w-16 h-16 text-yellow-500 mx-auto mb-4" />
+      {/* Add CSS for the flip animations */}
+      <style jsx global>{`
+        .perspective-1000 {
+          perspective: 1000px;
+        }
+        .transform-style-preserve-3d {
+          transform-style: preserve-3d;
+        }
+        .backface-hidden {
+          backface-visibility: hidden;
+        }
+        .rotate-y-180 {
+          transform: rotateY(180deg);
+        }
+        .rotate-y-0 {
+          transform: rotateY(0deg);
+        }
+        @keyframes matchFade {
+          0% { transform: rotateY(180deg) scale(1); background-color: #e9fae9; }
+          30% { transform: rotateY(180deg) scale(1.05); background-color: #9ae49a; }
+          100% { transform: rotateY(180deg) scale(1); background-color: #e2e2e2; }
+        }
+        .animate-match-fade {
+          animation: matchFade 0.8s ease-out forwards;
+        }
+      `}</style>
+
+      {matchedEmoji.length === shuffledEmoji.length && shuffledEmoji.length > 0 && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center animate-fadeIn">
+          <Card className="p-8 max-w-sm w-full mx-4 text-center animate-scaleIn">
+            <Trophy className="w-16 h-16 text-yellow-500 mx-auto mb-4 animate-bounce" />
             <h2 className="text-2xl font-bold mb-4">Congratulations!</h2>
             <p className="text-gray-600 mb-6">
               You've matched all the pairs! Want to play again?
@@ -182,6 +245,24 @@ const Memory = () => {
           </Card>
         </div>
       )}
+
+      {/* Additional animations for modal */}
+      <style jsx global>{`
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes scaleIn {
+          from { transform: scale(0.8); opacity: 0; }
+          to { transform: scale(1); opacity: 1; }
+        }
+        .animate-fadeIn {
+          animation: fadeIn 0.5s ease-out forwards;
+        }
+        .animate-scaleIn {
+          animation: scaleIn 0.5s ease-out forwards;
+        }
+      `}</style>
     </div>
   );
 };
